@@ -16,6 +16,9 @@ Cách chạy (cùng thư mục với weather_server.py, client tự khởi độ
 import asyncio
 import sys
 
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
+
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -32,10 +35,13 @@ async def main() -> None:
             tools = await session.list_tools()
             print("Tools server cung cấp:")
             for t in tools.tools:
-                print(f"  - {t.name}: {t.description}")
+                print(f"  - Tên: {t.name}")
+                print(f"    Mô tả: {t.description}")
+                print(f"    Input schema: {t.inputSchema}")
 
             # 2. Gọi tool — SERVER thực thi rồi trả kết quả về qua MCP
-            for city in ["Hanoi", "Danang", "Haiphong"]:
+            print("\n--- Bắt đầu gọi tool ---")
+            for city in ["Hanoi", "Danang", "Haiphong", "Ho Chi Minh City", "Vinh"]:
                 result = await session.call_tool("get_weather", {"city": city})
                 print(f"\ncall_tool get_weather(city={city!r}):")
                 print("  ->", result.content[0].text)

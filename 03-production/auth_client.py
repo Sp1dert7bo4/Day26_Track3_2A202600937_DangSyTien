@@ -12,38 +12,63 @@ Cách chạy (cần auth_server.py đang chạy ở terminal khác):
 from __future__ import annotations
 
 import asyncio
+import sys
+
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
 
 import httpx
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-SERVER_URL = "http://localhost:8000/mcp"
-TOKEN = "dev-token-abc123"
+SERVER_URL = "http://localhost:8001/mcp"
+VALID_TOKEN = "demo-secret-token"
 
+async def test_auth(case_name: str, token: str | None = None) -> None:
+    print(f"\n{'='*40}")
+    print(f"Test Case: {case_name}")
+    print(f"{'='*40}")
+    
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    http_client = httpx.AsyncClient(headers=headers)
+    
+    try:
+        async with http_client:
+            async with streamable_http_client(SERVER_URL, http_client=http_client) as (read, write, _):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+                    print(f"Thành công! Khám phá được {len(tools.tools)} tools.")
+                    result = await session.call_tool("get_weather", {"city": "Hanoi"})
+                    print(f"Kết quả gọi tool: {result.content[0].text}")
+    except httpx.HTTPStatusError as e:
+        print(f"Lỗi HTTP: {e.response.status_code} - {e.response.reason_phrase}")
+    except Exception as e:
+        if "401" in str(e):
+            print("Lỗi HTTP: 401 - Unauthorized (Thiếu Token)")
+        elif "403" in str(e):
+            print("Lỗi HTTP: 403 - Forbidden (Sai Token)")
+        else:
+            print(f"Lỗi: {type(e).__name__} - {e}")
+            if type(e).__name__ == "ExceptionGroup":
+                for sub_e in e.exceptions:
+                    print(f"  Sub-exception: {type(sub_e).__name__} - {sub_e}")
+                    if hasattr(sub_e, 'response'):
+                        print(f"  HTTP Lỗi: {sub_e.response.status_code}")
 
 async def main() -> None:
-    http_client = httpx.AsyncClient(
-        headers={"Authorization": f"Bearer {TOKEN}"},
-    )
-
-    async with http_client:
-        async with streamable_http_client(SERVER_URL, http_client=http_client) as (
-            read,
-            write,
-            _get_session_id,
-        ):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-
-                tools = await session.list_tools()
-                print("Tools (có auth):")
-                for t in tools.tools:
-                    print(f"  - {t.name}: {t.description}")
-
-                result = await session.call_tool("get_weather", {"city": "Hanoi"})
-                print(f"\nKết quả: {result.content[0].text}")
-
+    # 1. Thiếu token
+    await test_auth("Thiếu Token (Expected: 401 Unauthorized)", None)
+    
+    # 2. Sai token
+    await test_auth("Sai Token (Expected: 403 Forbidden)", "wrong-token-123")
+    
+    # 3. Token đúng
+    await test_auth("Token hợp lệ (Expected: Thành công)", VALID_TOKEN)
 
 if __name__ == "__main__":
     asyncio.run(main())

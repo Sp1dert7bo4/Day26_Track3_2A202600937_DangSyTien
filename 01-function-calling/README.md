@@ -15,11 +15,44 @@ User hỏi  →  Model quyết định gọi get_weather(city="Hà Nội")
 
 ## Cách chạy
 
+1. Cài đặt thư viện và thiết lập API Key:
 ```bash
 pip install -r ../requirements.txt
-export GEMINI_API_KEY=...
+
+# Thiết lập biến môi trường (Linux/macOS)
+export GEMINI_API_KEY="your_api_key_here"
+
+# Hoặc trên Windows PowerShell:
+# $env:GEMINI_API_KEY="your_api_key_here"
+```
+
+*(Lưu ý: Code đã được cập nhật để tự động đọc từ file `.env` ở thư mục gốc nếu bạn không muốn gõ lại lệnh export).*
+
+2. Chạy ứng dụng:
+```bash
 python weather_function_calling.py
 ```
+
+### Kết quả mong đợi (Expected Output)
+```text
+User: Thời tiết Hà Nội và Đà Nẵng hôm nay thế nào?
+
+  [model yêu cầu] get_weather({'city': 'Hà Nội'})
+  [app thực thi]  -> {"city": "H\u00e0 N\u1ed9i", "nhi\u1ec7t_\u0111\u1ed9": "29\u00b0C", "th\u1eddi_ti\u1ebft": "tr\u1eddi m\u01b0a nh\u1eb9", "độ_ẩm": "82%", "gió": {"hướng": "Đông Nam", "tốc_độ": "12 km/h"}}
+  [model yêu cầu] get_weather({'city': 'Đà Nẵng'})
+  [app thực thi]  -> {"city": "\u0110\u00e0 N\u1eb5ng", "nhi\u1ec7t_\u0111\u1ed9": "30\u00b0C", "th\u1eddi_ti\u1ebft": "nhi\u1ec1u m\u00e2y", "độ_ẩm": "78%", "gió": {"hướng": "Đông", "tốc_độ": "10 km/h"}}
+
+Trả lời: Chào bạn! 🌤️
+Hiện tại ở **Hà Nội** nhiệt độ là 29°C, trời mưa nhẹ 🌧️, độ ẩm 82%. Nếu ra ngoài, bạn nhớ mang theo ô hoặc áo mưa nhé! ☔
+Ở **Đà Nẵng** thì trời nhiều mây ☁️, nhiệt độ khoảng 30°C, khá mát mẻ và dễ chịu. 
+Chúc bạn một ngày vui vẻ! 😊
+```
+
+### Xử lý sự cố (Troubleshooting)
+
+- **Lỗi `Không tìm thấy Gemini API Key!`**: Bạn chưa set biến môi trường. Hãy chạy lại lệnh `export GEMINI_API_KEY=...` (hoặc tạo file `.env` ở thư mục gốc chứa `GEMINI_API_KEY=...`).
+- **Lỗi `429 Too Many Requests` (Quota Exceeded)**: Key của bạn đã vượt quá giới hạn gọi API miễn phí hoặc không hợp lệ. Hãy kiểm tra lại ở Google AI Studio và thử tạo một key mới.
+- **Lỗi `400 Bad Request`**: Có thể model `gemini-2.5-flash` đang bị lỗi hoặc API key chưa có quyền. Bạn có thể thay đổi sang `gemini-1.5-flash` trong code.
 
 ## File
 

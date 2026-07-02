@@ -9,8 +9,29 @@ Cách chạy:
     python weather_function_calling.py
 """
 
+import os
+import sys
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+# Tự động tải biến môi trường từ file .env nếu có
+load_dotenv()
+
+# Kiểm tra API Key trước khi khởi tạo client
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    print("❌ LỖI: Không tìm thấy Gemini API Key!")
+    print("Vui lòng thiết lập biến môi trường trước khi chạy:")
+    print("  - Linux/macOS: export GEMINI_API_KEY='your_api_key_here'")
+    print("  - Windows (CMD): set GEMINI_API_KEY='your_api_key_here'")
+    print("  - Windows (PowerShell): $env:GEMINI_API_KEY='your_api_key_here'")
+    print("Hoặc bạn có thể dùng file .env nếu đã thiết lập sẵn.")
+    sys.exit(1)
+
+# Fix lỗi in tiếng Việt (Unicode) trên Windows
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
 
 client = genai.Client()
 

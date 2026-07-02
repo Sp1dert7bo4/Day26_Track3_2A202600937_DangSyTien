@@ -25,7 +25,7 @@ from mcp.server.fastmcp import FastMCP
 
 # --- Token store (production: dùng DB, Redis, hoặc JWT verification) ---
 VALID_TOKENS: dict[str, str] = {
-    os.environ.get("MCP_AUTH_TOKEN", "dev-token-abc123"): "dev-user",
+    os.environ.get("AUTH_TOKEN", "demo-secret-token"): "dev-user",
     "prod-key-xyz789": "prod-service",
 }
 
@@ -48,10 +48,10 @@ class StaticTokenVerifier(TokenVerifier):
 mcp = FastMCP(
     "weather-secure",
     host="0.0.0.0",
-    port=8000,
+    port=8001,
     auth=AuthSettings(
-        issuer_url="http://localhost:8000",
-        resource_server_url="http://localhost:8000",
+        issuer_url="http://localhost:8001",
+        resource_server_url="http://localhost:8001",
     ),
     token_verifier=StaticTokenVerifier(),
 )

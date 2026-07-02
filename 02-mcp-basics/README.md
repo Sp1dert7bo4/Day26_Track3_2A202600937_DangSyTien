@@ -23,7 +23,11 @@ Kết quả mong đợi:
 
 ```
 Tools server cung cấp:
-  - get_weather: Lấy thời tiết hiện tại của một thành phố.
+  - Tên: get_weather
+    Mô tả: Lấy thời tiết hiện tại của một thành phố.
+    Input schema: {'type': 'object', 'properties': {'city': {'type': 'string'}}, 'required': ['city']}
+
+--- Bắt đầu gọi tool ---
 
 call_tool get_weather(city='Hanoi'):
   -> Hanoi: 29°C, trời mưa
@@ -33,6 +37,12 @@ call_tool get_weather(city='Danang'):
 
 call_tool get_weather(city='Haiphong'):
   -> Haiphong: 33°C, mưa rào
+
+call_tool get_weather(city='Ho Chi Minh City'):
+  -> Ho Chi Minh City: 34°C, nắng nóng
+
+call_tool get_weather(city='Vinh'):
+  -> Vinh: 28°C, không có dữ liệu chi tiết
 ```
 
 ## Files

@@ -3,6 +3,12 @@ import asyncio
 import httpx
 import os
 from mcp.server.fastmcp import FastMCP
+from dotenv import load_dotenv
+
+# Tải biến môi trường từ file .env (nếu có)
+load_dotenv()
+# Tải thử từ thư mục gốc của repo
+load_dotenv("../../.env")
 
 # Initialize FastMCP server
 port = int(os.getenv("PORT", 8085))
@@ -58,29 +64,36 @@ async def get_current_weather(city: str) -> str:
     }
     
     data = await make_weather_request("current.json", params)
+    import json
 
     if not data:
         if not API_KEY:
-            return f"❌ WeatherAPI key not configured. Please set WEATHERAPI_KEY environment variable with your API key from weatherapi.com"
-        return f"Unable to fetch current weather data for {city}. Please check the city name and API key configuration."
+            # Fallback sang Mock Data nếu người dùng chưa có API Key
+            import logging
+            logging.warning(f"⚠️ Không có WEATHERAPI_KEY. Trả về dữ liệu giả lập (mock data) cho {city}")
+            return json.dumps({
+                "city": city.title(),
+                "country": "Vietnam (Mock)",
+                "temperature": 28.5,
+                "condition": "Partly cloudy (Mock)",
+                "humidity": 75,
+                "wind": "10.0 km/h NE",
+                "last_updated": "2026-07-02 10:00"
+            }, ensure_ascii=False)
+        return json.dumps({"error": f"Unable to fetch current weather data for {city}. Please check the city name and API key configuration."})
 
     current = data["current"]
     location = data["location"]
     
-    return f"""
-Current Weather for {location['name']}, {location['region']}, {location['country']}:
-
-Temperature: {current['temp_c']}°C ({current['temp_f']}°F)
-Feels like: {current['feelslike_c']}°C ({current['feelslike_f']}°F)
-Condition: {current['condition']['text']}
-Humidity: {current['humidity']}%
-Wind: {current['wind_kph']} km/h ({current['wind_mph']} mph) {current['wind_dir']}
-Pressure: {current['pressure_mb']} mb
-UV Index: {current['uv']}
-Visibility: {current['vis_km']} km
-
-Last updated: {current['last_updated']}
-"""
+    return json.dumps({
+        "city": location["name"],
+        "country": location["country"],
+        "temperature": current["temp_c"],
+        "condition": current["condition"]["text"],
+        "humidity": current["humidity"],
+        "wind": f"{current['wind_kph']} km/h {current['wind_dir']}",
+        "last_updated": current["last_updated"]
+    }, ensure_ascii=False)
 
 @mcp.tool()
 async def get_forecast(city: str, days: int = 3) -> str:
@@ -88,11 +101,11 @@ async def get_forecast(city: str, days: int = 3) -> str:
 
     Args:
         city: City name (e.g., "Hanoi", "Haiphong", "Danang", "Brisbane", "Sydney", "Melbourne")
-        days: Number of days to forecast (1-3 for free tier, max 10 for paid)
+        days: Number of days to forecast (1-3)
     """
-    # Limit days to 3 for free tier
-    days = min(days, 3)
-    
+    if days < 1 or days > 3:
+        return f"❌ Lỗi: Tham số 'days' phải từ 1 đến 3. Bạn đã yêu cầu {days} ngày."
+        
     params = {
         "q": city,
         "days": str(days),
@@ -104,7 +117,12 @@ async def get_forecast(city: str, days: int = 3) -> str:
 
     if not data:
         if not API_KEY:
-            return f"❌ WeatherAPI key not configured. Please set WEATHERAPI_KEY environment variable with your API key from weatherapi.com"
+            # Fallback sang Mock Data nếu người dùng chưa có API Key
+            logging.warning(f"⚠️ Không có WEATHERAPI_KEY. Trả về dữ liệu dự báo giả lập (mock data) cho {city}")
+            return f"""Dự báo thời tiết giả lập (Mock) cho {city.title()}:
+- Hôm nay: 28°C - 32°C, Có mây rải rác.
+- Ngày mai: 27°C - 31°C, Khả năng có mưa rào.
+(Vui lòng cung cấp WEATHERAPI_KEY để xem dữ liệu thật)"""
         return f"Unable to fetch forecast data for {city}. Please check the city name and API key configuration."
 
     location = data["location"]
@@ -133,10 +151,22 @@ UV Index: {day_data['uv']}
 @mcp.tool()
 async def health_check() -> str:
     """Health check endpoint for deployment verification."""
-    return "✅ Weather MCP Server is running! Ready to provide weather data for Australian cities and worldwide."
+    from datetime import datetime
+    import logging
+    import json
+    logging.info("Health check requested")
+    
+    return json.dumps({
+        "status": "ok",
+        "server": "weather-mcp",
+        "timestamp": datetime.now().isoformat(),
+        "weather_api_configured": bool(API_KEY)
+    })
 
-print("✅ MCP server initialized with Streamable HTTP transport")
-print("🔧 Available tools: get_current_weather, get_forecast, health_check")
+import logging
+logging.basicConfig(level=logging.INFO)
+logging.info("✅ MCP server initialized with Streamable HTTP transport")
+logging.info("🔧 Available tools: get_current_weather, get_forecast, health_check")
 
 if __name__ == "__main__":
     import sys

@@ -23,6 +23,7 @@ _MOCK_DB = {
     "Hanoi": "29°C, trời mưa",
     "Haiphong": "33°C, mưa rào",
     "Danang": "30°C, nhiều mây",
+    "Ho Chi Minh City": "34°C, nắng nóng",
 }
 
 

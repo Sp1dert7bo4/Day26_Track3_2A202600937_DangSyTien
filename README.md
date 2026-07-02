@@ -1,232 +1,152 @@
-# Phân biệt MCP và Function Calling
+# Lab 04 — Weather Agent with Remote MCP Server
 
-Đây là hai khái niệm hay bị nhầm lẫn nhưng thực ra ở **hai tầng khác nhau**, và **bổ sung cho nhau** chứ không thay thế.
+## 🎯 1. Mục tiêu (Objectives)
+Lab này được thiết kế để giúp bạn hiểu rõ bản chất và cách vận hành của các thành phần sau:
+- **Hiểu Function Calling:** Model quyết định gọi hàm, còn việc thực thi hàm do môi trường (ứng dụng) đảm nhiệm.
+- **Hiểu MCP (Model Context Protocol):** Giao thức chuẩn hóa để kết nối AI Models với các công cụ (tools) và dữ liệu (context) bên ngoài.
+- **Hiểu ADK (Agent Development Kit):** Đóng vai trò là một **MCP Client** điều phối thông minh giữa LLM và Server.
+- **Xây dựng MCP Weather Server Remote:** Sử dụng FastMCP để tạo server xử lý dữ liệu thời tiết.
+- **Tích hợp:** Agent sử dụng trực tiếp các MCP tools qua giao thức **Streamable HTTP**.
 
-## Cấu trúc repo
+---
 
-```
-day26-mcp/
-├── README.md                ← Bạn đang đọc file này
-├── requirements.txt         ← pip install -r requirements.txt
-│
-├── 01-function-calling/     ← Bước 1: Function Calling thuần (Gemini SDK)
-│   ├── README.md
-│   └── weather_function_calling.py
-│
-├── 02-mcp-basics/           ← Bước 2: MCP server + client (không cần API key)
-│   ├── README.md
-│   ├── weather_server.py
-│   └── weather_client.py
-│
-└── 03-production/           ← Bước 3: Auth, Tool Registry, Versioning
-    ├── README.md
-    ├── auth_server.py
-    ├── auth_client.py
-    ├── registry.json
-    ├── registry_client.py
-    └── versioned_server.py
+## 🏗️ 2. Architecture Diagram
+
+Luồng hoạt động của hệ thống từ lúc người dùng đặt câu hỏi đến khi nhận được dữ liệu thời tiết:
+
+```text
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌──────────────────┐
+│  User Browser   │ ────▶ │   ADK Web UI    │ ────▶ │  Weather Agent  │ ────▶ │   MCP Server    │ ────▶ │  WeatherAPI.com  │
+│ (localhost:8000)│ ◀──── │ (mcp-client)    │ ◀──── │ (McpToolset)    │ ◀──── │ (localhost:8085)│ ◀──── │ (External API)   │
+└─────────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘       └──────────────────┘
 ```
 
-## Quick start
+---
 
+## 📂 3. Project Structure
+
+Dự án được chia thành các phần tiến trình học tập và ứng dụng thực tế:
+
+```
+📦 Day26_Track3_2A202600937_DangSyTien
+ ┣ 📂 01-function-calling/    # Minh họa Function Calling thuần bằng Gemini SDK
+ ┣ 📂 02-mcp-basics/          # Demo MCP cơ bản (stdio transport) không cần API key
+ ┣ 📂 03-production/          # Demo MCP nâng cao: Auth, Tool Registry, Versioning
+ ┣ 📂 04-lab/                 # Chứa toàn bộ Lab 04 Weather Agent (bao gồm client và server)
+ ┃ ┣ 📂 mcp-server/           # MCP Server cung cấp tools thời tiết qua HTTP
+ ┃ ┗ 📂 mcp-client/           # ADK Agent (Client) tích hợp và điều phối
+ ┣ 📜 .env.example            # Mẫu file chứa biến môi trường
+ ┗ 📜 README.md               # Tài liệu tổng hợp (file này)
+```
+
+---
+
+## ⚙️ 4. Setup (Cài đặt)
+
+### Yêu cầu trước khi bắt đầu
+- Bạn có thể sử dụng `uv` (khuyên dùng vì tốc độ siêu nhanh) hoặc `pip` để quản lý môi trường.
+- Đăng ký API Key tại [WeatherAPI](https://www.weatherapi.com/) (để lấy dữ liệu thời tiết thực).
+- Đăng ký Google API Key tại [Google AI Studio](https://aistudio.google.com/) (để dùng Gemini LLM).
+
+### Khởi tạo biến môi trường
+Tạo một file `.env` ở thư mục gốc của project (có thể copy từ `.env.example`):
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+cp .env.example .env
+```
+Mở file `.env` và điền thông tin:
+```env
+WEATHERAPI_KEY=your_weatherapi_key_here
+GOOGLE_API_KEY=your_gemini_api_key_here
+```
+*(Đảm bảo file `.env` đã được thêm vào `.gitignore` để không bao giờ bị commit lên Git).*
 
-# MCP demo (không cần API key)
-cd 02-mcp-basics && python weather_client.py
+---
 
-# Function Calling (cần Gemini API key)
-export GEMINI_API_KEY=...
-cd 01-function-calling && python weather_function_calling.py
+## 🚀 5. Hướng dẫn chạy (How to run)
 
-# Production — Auth (2 terminal)
-cd 03-production
-python auth_server.py              # terminal 1
-python auth_client.py              # terminal 2
+Hệ thống yêu cầu chạy song song **Server** và **Client** ở 2 terminal khác nhau.
 
-# Production — Tool Registry
-cd 03-production && python registry_client.py
+### Terminal 1: Chạy MCP Server
+Server này sẽ chạy ở nền và mở cổng 8085, đóng vai trò cung cấp tools thời tiết cho bất cứ MCP Client nào.
+```bash
+cd 04-lab/mcp-server
+uv sync
+export WEATHERAPI_KEY="your_weatherapi_key_here"  # Tùy chọn nếu chưa ghi vào .env
+uv run python weather.py
+```
+*Lưu ý: Nếu không có WEATHERAPI_KEY, server sẽ tự động trả về Mock Data (dữ liệu giả lập).*
+
+### Terminal 2: Chạy ADK Client
+Client này chứa giao diện Web và Agent điều phối Gemini LLM.
+```bash
+cd 04-lab/mcp-client
+uv sync
+# Chắc chắn GOOGLE_API_KEY đã có trong môi trường
+uv run adk web
 ```
 
 ---
 
-## Định nghĩa ngắn gọn
+## 💻 6. Cách sử dụng (Usage)
 
-**Function Calling** là một *khả năng của model* (capability). Model được huấn luyện để khi bạn đưa cho nó danh sách các "công cụ" (kèm schema mô tả tham số), nó có thể tự quyết định gọi công cụ nào và sinh ra JSON tham số phù hợp. Bản thân model **không chạy** function — nó chỉ nói "hãy gọi `get_weather(city='Hanoi')`". App mới là nơi chạy tool.
-
-**MCP (Model Context Protocol)** là một *giao thức chuẩn* (protocol) — giống như USB-C hay HTTP cho thế giới AI. Nó định nghĩa cách một **MCP Client** (như Claude Code, Claude Desktop) kết nối tới các **MCP Server** để khám phá và sử dụng tools, resources, prompts một cách thống nhất.
-
----
-
-## So sánh trực tiếp
-
-| Tiêu chí | Function Calling | Model Context Protocol (MCP) |
-|---|---|---|
-| **Bản chất** | Tính năng của mô hình (Model capability) | Giao thức giao tiếp client–server |
-| **Ai định nghĩa tool?** | Bạn hard-code trong từng app | Server tự công bố (self-describe) tool |
-| **Tái sử dụng** | Phải viết lại cho mỗi app/model | Viết 1 lần, mọi MCP client dùng được |
-| **Thực thi** | App của bạn tự chạy | MCP Server chạy, client điều phối |
-| **Tính chuẩn hóa** | Mỗi nhà cung cấp 1 kiểu (OpenAI, Anthropic khác nhau) | Một chuẩn chung do Anthropic đề xuất |
-| **Hệ sinh thái** | Khó chia sẻ dạng module đóng gói sẵn | Dễ dàng chia sẻ và tải về các "MCP Servers" mã nguồn mở |
-
-## Quan hệ giữa chúng
-
-Điểm quan trọng nhất: **MCP dùng Function Calling bên dưới**. Chúng không loại trừ nhau.
-
-```
-User hỏi
-   │
-   ▼
-LLM (dùng Function Calling để quyết định gọi tool nào)
-   │
-   ▼
-MCP Client  ──[giao thức MCP]──►  MCP Server (thực thi tool thật)
-   │                                   │
-   ◄───────────── kết quả ─────────────┘
-   ▼
-LLM tổng hợp câu trả lời
-```
-
-## Khi nào dùng cái nào?
-
-- **Function Calling thuần**: app đơn giản, tool gắn chặt với 1 ứng dụng, không cần chia sẻ.
-- **MCP**: muốn tool/tích hợp dùng lại được trên nhiều AI client, muốn tách biệt logic tool khỏi app, hoặc xây hệ sinh thái tích hợp (DB, file, API nội bộ...).
+1. Mở trình duyệt và truy cập: [http://localhost:8000](http://localhost:8000)
+2. Ở góc trên cùng bên trái giao diện, nhấn vào menu chọn Agent và chọn **`weather_agent`**.
+3. Bắt đầu chat với Agent bằng các câu hỏi thời tiết tự nhiên!
 
 ---
 
-## Minh hoạ bằng mã nguồn
+## 🛠️ 7. Danh sách MCP Tools
 
-Cùng một tool `get_weather`, dưới đây là hai cách triển khai để thấy rõ sự khác biệt.
-
-### [Cách 1 — Function Calling thuần (Google Gemini SDK)](01-function-calling/)
-
-Tool được **định nghĩa và thực thi ngay trong app**. Model chỉ quyết định gọi tool nào, app tự chạy và đưa kết quả trở lại.
-
-```
-User hỏi → Model quyết định gọi get_weather("Hà Nội")
-                    │
-                    ▼
-             App TỰ THỰC THI hàm get_weather
-                    │
-                    ▼
-             Model tổng hợp câu trả lời
-```
-
-> Nhược điểm: schema viết tay, tool gắn chặt trong app — muốn dùng lại ở app khác phải copy cả schema lẫn hàm.
-
-Chi tiết + code: xem [`01-function-calling/README.md`](01-function-calling/README.md)
-
-### [Cách 2 — MCP (server tự công bố tool, mọi client dùng chung)](02-mcp-basics/)
-
-Tool được tách ra **một MCP server độc lập**. Server tự "khai báo" nó có tool gì; bất kỳ MCP client nào (Claude Code, Claude Desktop, Cursor...) cũng cắm vào dùng được mà không cần biết code bên trong.
-
-```
-weather_client.py                       weather_server.py
-┌─────────────┐    giao thức MCP    ┌─────────────────┐
-│  list_tools │ ──────────────────▶ │ @mcp.tool()     │
-│  call_tool  │ ◀────────────────── │ get_weather()   │
-└─────────────┘     stdio           └─────────────────┘
-```
-
-Chi tiết + code: xem [`02-mcp-basics/README.md`](02-mcp-basics/README.md)
-
-### Điểm khác biệt rút ra từ code
-
-| | Function Calling thuần | MCP |
-|---|---|---|
-| Khai báo schema | Tự viết tay trong app | `@mcp.tool()` tự sinh từ type hints |
-| Nơi thực thi tool | Trong app gọi model | Trong MCP server riêng |
-| Khám phá tool | Hard-code danh sách `tools` | `session.list_tools()` tại runtime |
-| Dùng lại ở app khác | Copy code | Cắm thêm client, không sửa server |
-| Vai trò Function Calling | Là toàn bộ cơ chế | Là lớp model bên trong MCP |
+MCP Server expose 3 tools thông qua giao thức Streamable HTTP:
+1. `get_current_weather(city: str)`: Lấy dữ liệu thời tiết hiện hành theo thời gian thực (nhiệt độ, độ ẩm, sức gió,...).
+2. `get_forecast(city: str, days: int)`: Lấy dự báo thời tiết trong `days` ngày tới.
+3. `health_check()`: Kiểm tra tình trạng hoạt động của MCP Server và API Key.
 
 ---
 
-## [MCP trong Production](03-production/)
+## 💬 8. Example Prompts
 
-Các ví dụ trên chạy tốt trên máy cá nhân, nhưng đưa vào **hệ thống production** cần giải quyết thêm ba vấn đề:
+Bạn có thể thử nhập các câu hỏi sau vào giao diện Web của ADK:
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Production MCP                     │
-│                                                     │
-│  ┌──────────┐   ┌───────────┐   ┌───────────────┐   │
-│  │ Security │   │ Registry  │   │  Versioning   │   │
-│  │          │   │           │   │               │   │
-│  │ • Auth   │   │ • Discover│   │ • v1 compat   │   │
-│  │ • Token  │   │ • Connect │   │ • v2 features │   │
-│  │ • Scopes │   │ • Health  │   │ • Deprecation │   │
-│  └──────────┘   └───────────┘   └───────────────┘   │
-└─────────────────────────────────────────────────────┘
-```
-
-### 1. Security — Authentication & Authorization
-
-MCP server phục vụ qua **HTTP** cho nhiều client → cần xác thực. MCP SDK hỗ trợ sẵn **Bearer Token** verification:
-
-- Server: cấu hình `AuthSettings` + implement `TokenVerifier` protocol
-- Client: gửi header `Authorization: Bearer <token>` qua `httpx.AsyncClient`
-- Không có token → 401, token sai → 403, logic tool không biết gì về auth
-
-| Tầng | Demo (stdio) | Production (HTTP) |
-|---|---|---|
-| Transport | stdio (cùng máy) | Streamable HTTP (qua mạng) |
-| Auth | Không cần | Bearer token / OAuth / mTLS |
-| Phạm vi truy cập | Toàn bộ | Scopes giới hạn từng client |
-
-### 2. Tool Registry & Discovery
-
-Agent **không hard-code** tool nào. Nó hỏi **Tool Registry** — danh mục trung tâm liệt kê tất cả tool từ mọi server — theo yêu cầu task:
-
-```
-Agent nhận task "lấy thời tiết Hà Nội"
-   │
-   ▼
-Tool Registry: "tool nào có tag 'weather'?"
-   │
-   ├── get_weather v1.0 → server: weather (stdio)
-   └── get_weather_v2 v2.0 → server: weather-v2 (stdio)
-   │
-   ▼
-Agent chọn best match (v2.0, không deprecated)
-   │
-   ▼
-Kết nối tới server weather-v2, gọi get_weather_v2(city="Hanoi")
-```
-
-Registry là **tool-centric** — đơn vị khám phá là **tool** (tag, description, parameters), không phải server.
-
-| | Hard-code (demo) | Tool Registry (production) |
-|---|---|---|
-| Agent biết tool nào? | Chỉ tool được code sẵn | Tất cả tool trong registry |
-| Tìm tool | Theo tên cố định | Theo tag, keyword, capability |
-| Thêm tool mới | Sửa code agent | Thêm entry vào registry |
-| Chọn tool | Developer quyết định | Agent tự chọn best match |
-
-### 3. Versioning & Backward Compatibility
-
-Server v1 có `get_weather(city)` trả chuỗi đơn giản. V2 muốn trả JSON chi tiết, thêm `include_forecast`. Nếu đổi trực tiếp → mọi client cũ break. Giải pháp — 3 kỹ thuật kết hợp:
-
-| Kỹ thuật | Mô tả |
-|---|---|
-| **Tool mới song song** | `get_weather_v2` tồn tại bên cạnh `get_weather` — không xoá tool cũ |
-| **Tham số optional** | `include_forecast`, `units` có default → client cũ gọi vẫn đúng |
-| **Server metadata** | Resource `server://info` công bố version + deprecation notice |
-
-Chi tiết + code cho cả 3 phần: xem [`03-production/README.md`](03-production/README.md)
-
-### Tổng kết Production Checklist
-
-| Khía cạnh | Dev/Demo | Production |
-|---|---|---|
-| **Transport** | stdio (cùng máy) | HTTP/SSE (qua mạng) |
-| **Auth** | Không | Bearer token, OAuth, mTLS |
-| **Discovery** | Hard-code tool/server | Tool Registry — agent tìm tool theo task |
-| **Versioning** | 1 tool duy nhất | Tool v1 + v2 song song, deprecation notice |
-| **Health** | Không | Health check, retry, circuit breaker |
-| **Logging** | `print()` | Structured logging, tracing (OpenTelemetry) |
+- *"What's the weather in Brisbane?"*
+- *"Give me a 3-day forecast for Tokyo."*
+- *"Is the weather MCP server healthy?"*
+- *"Should I bring an umbrella in Hanoi today?"*
 
 ---
 
-**Tóm lại:** Function Calling là *cơ chế model gọi công cụ*; MCP là *chuẩn để kết nối model với các công cụ đó* — và MCP thực chất dùng Function Calling làm nền tảng để hoạt động.
+## ⚠️ 9. Troubleshooting (Khắc phục sự cố)
+
+| Sự cố / Lỗi | Nguyên nhân & Cách khắc phục |
+|-------------|------------------------------|
+| **Thiếu WEATHERAPI_KEY** | Code đã được tích hợp tính năng Mock Data tự động. Tuy nhiên, nếu bạn muốn dữ liệu thật, hãy đăng ký key ở weatherapi.com và truyền vào `.env` hoặc `export WEATHERAPI_KEY=...` |
+| **Thiếu GOOGLE_API_KEY** hoặc **Lỗi 403 Permission Denied** | Thiếu key hoặc API key của bạn bị chặn IP (IP address restriction) trên Google Cloud. Hãy tạo một key mới hoàn toàn trên AI Studio (không giới hạn IP) và thêm vào file `.env`. |
+| **Lỗi Connection / MCP server chưa chạy** | Đảm bảo Terminal 1 đang chạy `weather.py`. Nếu bạn tắt terminal này, ADK sẽ báo lỗi kết nối. |
+| **Sai Port 8085** | Nếu port bị trùng, bạn có thể truyền biến `PORT=9000` trước lệnh chạy server. Sau đó vào file `agent.py` của client để sửa lại đường dẫn `StreamableHTTPConnectionParams`. |
+| **ADK web không thấy agent** | Hãy kiểm tra xem bạn đã chạy `uv run adk web` đúng thư mục `04-lab/mcp-client` chưa. ADK tự tìm agent trong thư mục đang đứng. |
+| **WeatherAPI Quota / Rate Limit** | Tài khoản free của WeatherAPI có giới hạn. Đợi 1 thời gian hoặc đổi API key mới nếu bị khóa limit. |
+
+---
+
+## 🎬 10. Demo Video Script (2 phút)
+
+Nếu bạn cần quay video demo nộp bài, hãy tham khảo kịch bản 2 phút sau:
+
+- **0:00 - 0:15:** Giới thiệu ngắn gọn kiến trúc hệ thống: "*Đây là Weather Agent với ADK đóng vai trò Client, kết nối HTTP tới MCP Server để lấy dữ liệu từ WeatherAPI.*"
+- **0:15 - 0:35:** Mở Terminal 1, gõ lệnh chạy MCP Server (`uv run python weather.py`). Cho thấy log server báo khởi động thành công trên cổng 8085.
+- **0:35 - 0:50:** Mở Terminal 2, chạy ADK Web (`uv run adk web`).
+- **0:50 - 1:10:** Mở browser `localhost:8000`, chọn `weather_agent`, nhập lệnh: *"Is the weather MCP server healthy?"* để test tool `health_check`.
+- **1:10 - 1:30:** Test tool `get_current_weather` bằng cách nhập: *"What's the weather in Brisbane?"*. Show màn hình trả về nhiệt độ.
+- **1:30 - 1:45:** Test tool `get_forecast` bằng cách nhập: *"Give me a 3-day forecast for Tokyo."*
+- **1:45 - 2:00:** Tổng kết nhanh lại bài học cốt lõi: *"Agent không hề biết thời tiết, nó chỉ là một LLM Client thông minh tự động điều hướng sang MCP Server để thực thi tool và lấy dữ liệu"* và kết thúc video.
+
+---
+
+## ✅ 11. Checklist Nộp Bài
+
+- [x] Code đã chạy mượt mà (Pass cả 01, 02, 03 và 04-lab).
+- [x] File `README.md` rõ ràng, có hướng dẫn đầy đủ từng bước.
+- [x] Có file `.env.example` cung cấp sẵn template biến môi trường.
+- [x] KHÔNG bị lộ (commit) API Key thật lên Github.
+- [x] Có Troubleshooting để hỗ trợ fix lỗi dễ dàng.
+- [ ] Có Screenshot hoặc Video Demo đính kèm (Bạn cần tự quay/chụp màn hình).

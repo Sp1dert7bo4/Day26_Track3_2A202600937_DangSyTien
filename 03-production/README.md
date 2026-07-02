@@ -28,10 +28,29 @@ Server chạy qua **Streamable HTTP** thay vì stdio, kèm bearer token verifica
 ```bash
 # Terminal 1 — khởi động server
 python auth_server.py
-# Server lắng nghe tại http://localhost:8000/mcp
+# Server lắng nghe tại http://localhost:8001/mcp
 
-# Terminal 2 — client kết nối kèm token
+# Terminal 2 — client kết nối (chạy tự động test 3 cases)
 python auth_client.py
+```
+
+Kết quả mong đợi:
+```
+========================================
+Test Case: Thiếu Token (Expected: 401 Unauthorized)
+========================================
+Lỗi HTTP: 401 - Unauthorized (Thiếu Token)
+
+========================================
+Test Case: Sai Token (Expected: 403 Forbidden)
+========================================
+Lỗi HTTP: 403 - Forbidden (Sai Token)
+
+========================================
+Test Case: Token hợp lệ (Expected: Thành công)
+========================================
+Thành công! Khám phá được 1 tools.
+Kết quả gọi tool: Hanoi: 29°C, trời mưa
 ```
 
 Luồng:
@@ -46,12 +65,12 @@ Client                                Server
   │◀── 200 OK (tools, results) ────────  │
   │                                      │
   │── POST /mcp (token sai) ──────────▶  │
-  │◀── 401 Unauthorized ───────────────  │
+  │◀── 401/403 Lỗi Auth ───────────────  │
 ```
 
 - Token hợp lệ → truy cập tool bình thường
-- Thiếu token → `401`
-- Token sai → `403`
+- Thiếu token → `401 Unauthorized`
+- Token sai → `403 Forbidden`
 - Logic tool không biết gì về auth — SDK xử lý ở tầng transport
 
 ---
@@ -81,6 +100,9 @@ Kết quả mong đợi:
 Tìm thấy 2 tool(s):
   • get_weather v1.0.0 (server: weather)
   • get_weather_v2 v2.0.0 (server: weather-v2)
+
+  [Registry] Lọc bỏ tool deprecated, còn lại 2 tool active.
+  [Registry] Chọn get_weather_v2 v2.0.0 vì đây là phiên bản cao nhất.
 
 Best match: get_weather_v2 v2.0.0
 Kết nối tới server [weather-v2]...

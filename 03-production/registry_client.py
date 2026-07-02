@@ -24,6 +24,9 @@ import asyncio
 import json
 import os
 import sys
+
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
 from pathlib import Path
 
 import httpx
@@ -39,7 +42,7 @@ class ToolRegistry:
     """Danh mục trung tâm — agent tra cứu tool theo tag, tên, hoặc mô tả."""
 
     def __init__(self, path: Path = REGISTRY_PATH) -> None:
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             data = json.load(f)
         self.tools: dict[str, dict] = data["tools"]
         self.servers: dict[str, dict] = data["servers"]
@@ -74,9 +77,17 @@ class ToolRegistry:
         results = self.search(tag=tag, keyword=keyword)
         if not results:
             raise KeyError(f"Không tìm thấy tool (tag={tag}, keyword={keyword})")
+        
         active = [r for r in results if not r["deprecated"]]
+        if not active:
+            print("  [Registry] Cảnh báo: Tất cả tool tìm thấy đều bị deprecated, dùng tạm tool version cao nhất.")
+        else:
+            print(f"  [Registry] Lọc bỏ tool deprecated, còn lại {len(active)} tool active.")
+            
         candidates = active or results
-        return max(candidates, key=lambda r: r["version"])
+        best = max(candidates, key=lambda r: r["version"])
+        print(f"  [Registry] Chọn {best['tool']} v{best['version']} vì đây là phiên bản cao nhất.")
+        return best
 
 
 async def connect_and_call(match: dict, tool_args: dict) -> str:

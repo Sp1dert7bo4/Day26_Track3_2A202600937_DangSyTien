@@ -51,7 +51,8 @@ cd mcp-client
 
 # Create .env file with your Google API key
 # Get free key from: https://aistudio.google.com/apikey
-echo "GOOGLE_API_KEY=your_google_api_key_here" > .env
+# Dùng lệnh copy .env.example sang .env:
+cp .env.example .env
 ```
 
 ### 3. Install Dependencies
@@ -130,9 +131,10 @@ Fix the connection and restart ADK web.
 
 ## Environment Variables
 
-Create `.env` file:
+Create `.env` file (hoặc copy từ `.env.example`):
 ```bash
 GOOGLE_API_KEY=your_gemini_api_key
+MCP_SERVER_URL=http://localhost:8085/mcp
 ```
 
 ## Resources

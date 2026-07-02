@@ -1,4 +1,9 @@
 google-genai>=1.0.0
 mcp[cli]>=1.2.0
+fastmcp>=0.1.0
 httpx>=0.28.0
 uvicorn>=0.34.0
+google-adk>=0.0.1
+python-dotenv>=1.0.0
+uv>=0.1.0
+pytest>=8.0.0
